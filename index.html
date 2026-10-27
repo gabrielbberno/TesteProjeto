@@ -1,1 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Identificador de Objetos da Câmera</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
 
+    body {
+      background-color: #0f172a;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Container do Vídeo e Canvas */
+    .view-container {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      height: 75vh;
+      background-color: #000;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    /* Painel de Controles */
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 12px;
+    }
+
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background-color: #1d4ed8;
+    }
+
+    button:secondary {
+      background-color: #475569;
+    }
+
+    .info-text {
+      position: absolute;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="view-container">
+    <div class="info-text">Clique ou toque na tela para identificar</div>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="btn-switch">🔄 Trocar Câmera</button>
+    <button id="btn-clear" style="background-color: #475569;">✕ Limpar Box</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const btnSwitch = document.getElementById('btn-switch');
+    const btnClear = document.getElementById('btn-clear');
+
+    let currentFacingMode = 'environment'; // Começa com a câmera traseira no celular
+    let selectedBox = null;
+    let objectCounter = 1;
+
+    // Redimensionar Canvas para combinar com a tela
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+      draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Iniciar Câmera (PC e Mobile)
+    async function startCamera() {
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: currentFacingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          resizeCanvas();
+        };
+      } catch (err) {
+        alert("Erro ao acessar a câmera: " + err.message);
+      }
+    }
+
+    // Clique ou Toque no Canvas
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Tamanho padrão da caixa criada ao clicar
+      const boxWidth = 140;
+      const boxHeight = 140;
+
+      selectedBox = {
+        x: Math.max(10, Math.min(clickX - boxWidth / 2, canvas.width - boxWidth - 10)),
+        y: Math.max(10, Math.min(clickY - boxHeight / 2, canvas.height - boxHeight - 10)),
+        w: boxWidth,
+        h: boxHeight,
+        label: `Objeto #${objectCounter++}`
+      };
+
+      draw();
+    });
+
+    // Desenhar a caixa ao redor do objeto
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (selectedBox) {
+        const { x, y, w, h, label } = selectedBox;
+
+        // 1. Fundo semi-transparente dentro da caixa
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+        ctx.fillRect(x, y, w, h);
+
+        // 2. Borda/Linha do Box
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, w, h);
+
+        // 3. Cantos destacados
+        const cornerLen = 15;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        
+        // Canto superior esquerdo
+        ctx.beginPath(); ctx.moveTo(x, y + cornerLen); ctx.lineTo(x, y); ctx.lineTo(x + cornerLen, y); ctx.stroke();
+        // Canto superior direito
+        ctx.beginPath(); ctx.moveTo(x + w - cornerLen, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + cornerLen); ctx.stroke();
+        // Canto inferior esquerdo
+        ctx.beginPath(); ctx.moveTo(x, y + h - cornerLen); ctx.lineTo(x, y + h); ctx.lineTo(x + cornerLen, y + h); ctx.stroke();
+        // Canto inferior direito
+        ctx.beginPath(); ctx.moveTo(x + w - cornerLen, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - cornerLen); ctx.stroke();
+
+        // 4. Etiqueta com o nome
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 14px Arial';
+        const textWidth = ctx.measureText(label).width;
+        
+        ctx.fillRect(x, y - 25, textWidth + 16, 25);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(label, x + 8, y - 8);
+      }
+    }
+
+    // Trocar Câmera (Frontal / Traseira)
+    btnSwitch.addEventListener('click', () => {
+      currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+      startCamera();
+    });
+
+    // Limpar Seleção
+    btnClear.addEventListener('click', () => {
+      selectedBox = null;
+      draw();
+    });
+
+    // Inicializar
+    startCamera();
+  </script>
+</body>
+</html>
